@@ -2,50 +2,81 @@
 #include <LiquidCrystal_I2C.h>
 #include <DHT.h>
 
-#define DHTPIN 2          // GPIO pin connected to the DHT11 data pin
+// Define the DHT sensor pin and type
+#define DHTPIN 5          // GPIO pin connected to the DHT11 data pin
 #define DHTTYPE DHT11     // Define the type of DHT sensor
-#define LCD_ADDRESS 0x27  // I2C address of the LCD
 
-DHT dht(DHTPIN, DHTTYPE);  // Initialize DHT sensor
-LiquidCrystal_I2C lcd(LCD_ADDRESS, 16, 2); // Initialize LCD with 16 columns and 2 rows
+// Initialize the DHT sensor
+DHT dht(DHTPIN, DHTTYPE);
+
+// LCD settings
+int lcdColumns = 16;
+int lcdRows = 2;
+LiquidCrystal_I2C lcd(0x27, lcdColumns, lcdRows);
+
+// Timing variables
+unsigned long lastTextDisplayTime = 0;
+unsigned long lastWeatherUpdateTime = 0;
+unsigned long displayInterval = 5000;  // Interval to show the text (5 seconds)
+unsigned long textDisplayDuration = 3000;  // Duration to show the text (3 seconds)
+unsigned long weatherUpdateInterval = 2000;  // Weather update interval (2 seconds)
+bool showingStaticText = false;
 
 void setup() {
-  Serial.begin(115200);   // Initialize serial communication for debugging
-  dht.begin();            // Initialize the DHT sensor
-  lcd.begin(16, 2);       // Initialize the LCD with 16 columns and 2 rows
-  lcd.backlight();        // Turn on the backlight of the LCD
+  // Initialize LCD
+  lcd.init();
+  lcd.backlight();
+  
+  // Initialize DHT sensor
+  dht.begin();
 }
 
 void loop() {
-  // Read temperature and humidity
-  float humidity = dht.readHumidity();
-  float temperature = dht.readTemperature();
+  unsigned long currentMillis = millis();
 
-  // Check if readings failed
-  if (isnan(humidity) || isnan(temperature)) {
-    Serial.println("Failed to read from DHT sensor!");
+  // Determine if it's time to show the static text
+  if (currentMillis - lastTextDisplayTime >= displayInterval && !showingStaticText) {
+    showingStaticText = true;
+    lastTextDisplayTime = currentMillis;
+    
+    // Display the static text
+    lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("Sensor Error");
-    return;
+    lcd.print("CLIFF-TECH");
+    lcd.setCursor(0, 1);
+    lcd.print("Weather Station");
   }
 
-  // Print values to Serial Monitor
-  Serial.print("Humidity: ");
-  Serial.print(humidity);
-  Serial.print("%  Temperature: ");
-  Serial.print(temperature);
-  Serial.println("C");
+  // Keep showing the static text for 3 seconds
+  if (showingStaticText && (currentMillis - lastTextDisplayTime >= textDisplayDuration)) {
+    showingStaticText = false;
+    lastTextDisplayTime = currentMillis;  // Reset the last display time for the next interval
+  }
 
-  // Display values on LCD
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("T: ");
-  lcd.print(temperature);
-  lcd.print("C");
-  lcd.setCursor(0, 1);
-  lcd.print("H: ");
-  lcd.print(humidity);
-  lcd.print("%");
+  // Only update weather data when not showing the static text
+  if (!showingStaticText && currentMillis - lastWeatherUpdateTime >= weatherUpdateInterval) {
+    lastWeatherUpdateTime = currentMillis;
 
-  delay(2000); // Wait a few seconds between readings
+    // Display temperature and humidity readings
+    float humidity = dht.readHumidity();
+    float temperature = dht.readTemperature();
+
+    // Check if readings failed
+    if (isnan(humidity) || isnan(temperature)) {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Sensor Error");
+    } else {
+      // Display temperature and humidity only if the text isn't already on the screen
+      lcd.setCursor(0, 0);
+      lcd.print("Temp: ");
+      lcd.print(temperature);
+      lcd.print("C   ");  // Add spaces to clear any leftover characters
+
+      lcd.setCursor(0, 1);
+      lcd.print("Humid: ");
+      lcd.print(humidity);
+      lcd.print("%   ");  // Add spaces to clear any leftover characters
+    }
+  }
 }
